@@ -1,0 +1,36 @@
+[package]
+name = "schnellru"
+version = "0.1.0"
+authors = ["Jan Bujak <j@exia.io>"]
+repository = "https://github.com/koute/schnellru"
+homepage = "https://github.com/koute/schnellru"
+license = "MIT/Apache-2.0"
+readme = "README.md"
+description = "A fast and flexible LRU map"
+edition = "2021"
+
+[features]
+default = ["runtime-rng"]
+
+# When enabled uses the `getrandom` crate to seed the maps' hasher by default.
+runtime-rng = ["ahash/runtime-rng"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+hashbrown = { version = "0.13.1", features = ["raw", "inline-more"], default-features = false }
+ahash = { version = "0.8.2", default-features = false }
+cfg-if = "1.0.0"
+
+[dev-dependencies]
+criterion = "0.4.0"
+lru = "0.8.1"
+indexmap = "1.9.2"
+
+[[bench]]
+name = "benches"
+harness = false
+
+[workspace]
+members = [".", "fuzz"]

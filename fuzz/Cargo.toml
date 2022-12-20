@@ -1,0 +1,27 @@
+[package]
+name = "fuzz"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "fuzz-behavior-matches-lru"
+path = "src/fuzz-behavior-matches-lru.rs"
+
+[[bin]]
+name = "fuzz-internal-invariants"
+path = "src/fuzz-internal-invariants.rs"
+
+[[bin]]
+name = "fuzz-by-memory-usage-works"
+path = "src/fuzz-by-memory-usage-works.rs"
+
+[dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+honggfuzz = "0.5"
+lru = "0.8.1"
+
+schnellru = { path = ".." }
+ahash = "0.8"
