@@ -12,6 +12,7 @@ pub enum Action {
     PopOldest,
     PopNewest,
     Clear,
+    ToggleOverflow,
 }
 
 #[derive(Arbitrary)]
@@ -25,11 +26,16 @@ pub struct Testcase {
 pub struct LimitedLength {
     limit: usize,
     cost: usize,
+    overflow: bool,
 }
 
 impl LimitedLength {
     pub const fn new(limit: usize) -> Self {
-        LimitedLength { limit, cost: 0 }
+        LimitedLength {
+            limit,
+            cost: 0,
+            overflow: false,
+        }
     }
 }
 
@@ -40,7 +46,7 @@ impl<K, V> schnellru::Limiter<K, V> for LimitedLength {
     #[inline]
     fn is_over_the_limit(&self, current_length: usize) -> bool {
         assert_eq!(self.cost, current_length);
-        current_length > self.limit
+        self.overflow || current_length > self.limit
     }
 
     #[inline]
@@ -91,8 +97,6 @@ fn main() {
                         let value = lru.get_or_insert(key, || value);
                         if testcase.length == 0 {
                             assert!(value.is_none());
-                        } else {
-                            assert!(value.is_some());
                         }
                     }
                     Action::Get { key } => {
@@ -109,6 +113,10 @@ fn main() {
                     }
                     Action::Clear => {
                         lru.clear();
+                    }
+                    Action::ToggleOverflow => {
+                        let value = !lru.limiter_mut().overflow;
+                        lru.limiter_mut().overflow = value;
                     }
                 }
 

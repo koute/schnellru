@@ -745,7 +745,7 @@ where
             self.pop_until_under_the_limit();
         }
 
-        true
+        !self.is_empty()
     }
 
     /// Clears the map.
@@ -1516,6 +1516,34 @@ mod tests {
         }
     }
 
+    #[derive(Copy, Clone, Debug, Default)]
+    pub struct Manual {
+        overflow: bool,
+    }
+
+    impl<K, V> Limiter<K, V> for Manual {
+        type KeyToInsert<'a> = K;
+        type LinkType = usize;
+
+        fn is_over_the_limit(&self, _: usize) -> bool {
+            self.overflow
+        }
+
+        fn on_insert<'a>(&mut self, _: usize, key: K, value: V) -> Option<(K, V)> {
+            Some((key, value))
+        }
+
+        fn on_replace(&mut self, _: usize, _: &mut K, _: K, _: &mut V, _: &mut V) -> bool {
+            true
+        }
+
+        fn on_cleared(&mut self) {}
+        fn on_removed(&mut self, _: &mut K, _: &mut V) {}
+        fn on_grow(&mut self, _: usize) -> bool {
+            true
+        }
+    }
+
     #[test]
     fn insert_works() {
         let mut lru = LruMap::new(UnlimitedCompact);
@@ -2133,5 +2161,26 @@ mod tests {
                 assert_eq!(lru.guaranteed_capacity(), pair[1]);
             }
         }
+    }
+
+    #[test]
+    fn inserting_can_evict_the_whole_cache() {
+        let mut lru = LruMap::new(Manual { overflow: false });
+        lru.insert(1, 10);
+        lru.insert(2, 20);
+        assert_eq!(lru.len(), 2);
+
+        lru.limiter_mut().overflow = true;
+        assert!(lru.get_or_insert(3, || 30).is_none());
+        assert!(lru.is_empty());
+
+        lru.limiter_mut().overflow = false;
+        lru.insert(1, 10);
+        lru.insert(2, 20);
+        assert_eq!(lru.len(), 2);
+
+        lru.limiter_mut().overflow = true;
+        assert!(!lru.insert(3, 30));
+        assert!(lru.is_empty());
     }
 }
