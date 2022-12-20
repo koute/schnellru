@@ -1591,7 +1591,7 @@ mod tests {
 
     #[test]
     fn limiter_does_not_allow_the_map_to_grow() {
-        let mut lru = LruMap::new(ByLength::new(7));
+        let mut lru = LruMap::with_seed(ByLength::new(7), [12, 34, 56, 78]);
         assert_eq!(lru.len(), 0);
         assert_eq!(lru.guaranteed_capacity(), 0);
         for n in 9..32 {
