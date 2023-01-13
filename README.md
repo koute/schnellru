@@ -23,8 +23,21 @@ map.insert(2, "two");
 map.insert(3, "three");
 assert_eq!(map.len(), 3);
 
-// Access the middle one.
+// They're ordered according to which one was inserted last.
+let mut iter = map.iter();
+assert_eq!(iter.next().unwrap(), (&3, &"three"));
+assert_eq!(iter.next().unwrap(), (&2, &"two"));
+assert_eq!(iter.next().unwrap(), (&1, &"one"));
+
+// Access the least recently inserted one.
 assert_eq!(*map.get(&1).unwrap(), "one");
+
+// Now the order's changed.
+// The element we've accessed was moved to the front.
+let mut iter = map.iter();
+assert_eq!(iter.next().unwrap(), (&1, &"one"));
+assert_eq!(iter.next().unwrap(), (&3, &"three"));
+assert_eq!(iter.next().unwrap(), (&2, &"two"));
 
 // Insert a fourth element.
 // This will automatically pop the least recently accessed one.
@@ -35,6 +48,12 @@ assert_eq!(map.len(), 3);
 
 // And this is the one which was removed.
 assert!(map.peek(&2).is_none());
+
+// And here's the new order.
+let mut iter = map.iter();
+assert_eq!(iter.next().unwrap(), (&4, &"four"));
+assert_eq!(iter.next().unwrap(), (&1, &"one"));
+assert_eq!(iter.next().unwrap(), (&3, &"three"));
 ```
 
 ## License
