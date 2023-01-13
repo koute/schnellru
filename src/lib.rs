@@ -1894,7 +1894,7 @@ mod tests {
     }
 
     #[test]
-    fn when_new_value_is_too_constly_an_existing_item_will_be_removed_map_is_not_cleared() {
+    fn when_new_value_is_too_costly_an_existing_item_will_be_removed_map_is_not_cleared() {
         let mut lru = LruMap::new(ByValue::new(2));
         lru.insert(1, 1);
         lru.insert(2, 2);
