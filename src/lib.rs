@@ -602,7 +602,7 @@ where
     }
 
     /// Tries to get the value for a given `key` or insert a new value if there's no element
-    /// in the map which maches that `key`.
+    /// in the map which matches that `key`.
     ///
     /// If present the element will be promoted to be the most recently used.
     #[inline]
