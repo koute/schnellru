@@ -612,7 +612,7 @@ where
         get: impl FnOnce() -> V,
     ) -> Option<&mut V>
     where
-        L::KeyToInsert<'a>: Into<K> + Hash + PartialEq<K>,
+        L::KeyToInsert<'a>: Hash + PartialEq<K>,
     {
         match self.get_or_insert_fallible(key, || Ok(get())) {
             Ok(value) => value,
@@ -628,7 +628,7 @@ where
         get: impl FnOnce() -> Result<V, E>,
     ) -> Result<Option<&mut V>, E>
     where
-        L::KeyToInsert<'a>: Into<K> + Hash + PartialEq<K>,
+        L::KeyToInsert<'a>: Hash + PartialEq<K>,
     {
         #[inline(always)]
         unsafe fn cast_lifetime<'a, 'b, T>(x: &'a mut T) -> &'b mut T {
@@ -694,7 +694,7 @@ where
     #[inline]
     pub fn insert<'a>(&mut self, key: L::KeyToInsert<'a>, mut value: V) -> bool
     where
-        L::KeyToInsert<'a>: Into<K> + Hash + PartialEq<K>,
+        L::KeyToInsert<'a>: Hash + PartialEq<K>,
     {
         let hash = self.hash_key(&key);
         if let Some(bucket) = self.map.find(hash, |entry| key == entry.key) {
@@ -1524,6 +1524,7 @@ mod tests {
     pub use super::*;
 
     extern crate std;
+    use std::string::String;
     use std::{vec, vec::Vec};
 
     fn to_vec<K, V, L, S>(lru: &LruMap<K, V, L, S>) -> Vec<(K, V)>
@@ -1726,6 +1727,48 @@ mod tests {
 
         fn on_cleared(&mut self) {}
         fn on_removed(&mut self, _: &mut K, _: &mut V) {}
+        fn on_grow(&mut self, _: usize) -> bool {
+            true
+        }
+    }
+
+    #[derive(Copy, Clone, Debug, Default)]
+    pub struct WithCustomInsertKey;
+    pub struct InsertKey<'a>(&'a str);
+
+    impl<'a> PartialEq<String> for InsertKey<'a> {
+        fn eq(&self, rhs: &String) -> bool {
+            self.0 == rhs
+        }
+    }
+
+    impl<'a> core::hash::Hash for InsertKey<'a> {
+        fn hash<H>(&self, state: &mut H)
+        where
+            H: core::hash::Hasher,
+        {
+            self.0.hash(state)
+        }
+    }
+
+    impl<V> Limiter<String, V> for WithCustomInsertKey {
+        type KeyToInsert<'a> = InsertKey<'a>;
+        type LinkType = usize;
+
+        fn is_over_the_limit(&self, _: usize) -> bool {
+            false
+        }
+
+        fn on_insert<'a>(&mut self, _: usize, key: InsertKey<'a>, value: V) -> Option<(String, V)> {
+            Some((String::from(key.0), value))
+        }
+
+        fn on_replace<'a>(&mut self, _: usize, _: &mut String, _: InsertKey<'a>, _: &mut V, _: &mut V) -> bool {
+            true
+        }
+
+        fn on_cleared(&mut self) {}
+        fn on_removed(&mut self, _: &mut String, _: &mut V) {}
         fn on_grow(&mut self, _: usize) -> bool {
             true
         }
@@ -2326,6 +2369,33 @@ mod tests {
         assert_eq!(value, &2);
 
         let value = lru.get_or_insert("4".to_string(), || 40).unwrap();
+        assert_eq!(value, &40);
+
+        let value = lru.get_or_insert("2", || 200).unwrap();
+        assert_eq!(value, &2);
+
+        let value = lru.get_or_insert("6", || 6).unwrap();
+        assert_eq!(value, &6);
+
+        lru.assert_check_internal_state();
+    }
+
+    #[test]
+    fn lru_with_a_custom_insert_key_works() {
+        // This is mostly just to check that it compiles.
+
+        let mut lru = LruMap::new(WithCustomInsertKey);
+        lru.insert(InsertKey("1"), 1);
+        lru.insert(InsertKey("2"), 2);
+        lru.insert(InsertKey("3"), 3);
+
+        assert_eq!(lru.peek("2").unwrap(), &2);
+        assert_eq!(lru.get("2").unwrap(), &2);
+
+        let value = lru.get_or_insert(InsertKey("2"), || 20).unwrap();
+        assert_eq!(value, &2);
+
+        let value = lru.get_or_insert(InsertKey("4"), || 40).unwrap();
         assert_eq!(value, &40);
 
         lru.assert_check_internal_state();
