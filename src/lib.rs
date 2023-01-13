@@ -600,7 +600,11 @@ where
     ///
     /// If present the element will be promoted to be the most recently used.
     #[inline]
-    pub fn get_or_insert<'a>(&mut self, key: L::KeyToInsert<'a>, get: impl FnOnce() -> V) -> Option<&mut V>
+    pub fn get_or_insert<'a>(
+        &mut self,
+        key: (impl Into<L::KeyToInsert<'a>> + Hash + PartialEq<K> + ?Sized),
+        get: impl FnOnce() -> V,
+    ) -> Option<&mut V>
     where
         L::KeyToInsert<'a>: Into<K> + Hash + PartialEq<K>,
     {
@@ -614,7 +618,7 @@ where
     #[inline]
     pub fn get_or_insert_fallible<'a, E>(
         &mut self,
-        key: L::KeyToInsert<'a>,
+        key: (impl Into<L::KeyToInsert<'a>> + Hash + PartialEq<K> + ?Sized),
         get: impl FnOnce() -> Result<V, E>,
     ) -> Result<Option<&mut V>, E>
     where
@@ -634,7 +638,7 @@ where
         }
 
         let value = get()?;
-        if self.insert(key, value) {
+        if self.insert(key.into(), value) {
             debug_assert_ne!(self.newest, L::LinkType::MAX);
 
             // SAFETY: After inserting a new element the `newest` is always a valid index.
