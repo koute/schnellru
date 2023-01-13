@@ -542,12 +542,7 @@ where
 
     /// Returns the current memory usage of the map, in bytes.
     pub fn memory_usage(&self) -> usize {
-        if self.map.capacity() == 0 {
-            // Workaround for a bug in `hashbrown`.
-            0
-        } else {
-            self.map.allocation_info().1.size()
-        }
+        self.map.allocation_info().1.size()
     }
 
     /// Returns the number of elements in the map.

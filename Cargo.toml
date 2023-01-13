@@ -19,7 +19,11 @@ runtime-rng = ["ahash/runtime-rng"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-hashbrown = { version = "0.13.1", features = ["raw", "inline-more"], default-features = false }
+# We depend on some of `hashbrown`'s internal details for some of our functionality.
+# While it is unlikely those internal details suddenly change in a minor version update
+# it's safer to just explicitly pin the exact minor version we need.
+hashbrown = { version = "= 0.13.2", features = ["raw", "inline-more"], default-features = false }
+
 ahash = { version = "0.8.2", default-features = false }
 cfg-if = "1.0.0"
 
