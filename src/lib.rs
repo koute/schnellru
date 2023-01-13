@@ -1156,36 +1156,28 @@ where
 
                 index_map[old_index] = core::mem::MaybeUninit::new(L::LinkType::from_usize(new_index));
             }
+        }
 
+        unsafe {
             // Adjust all of the links in the new map.
             let mut iter = self.map.iter();
             while let Some(new_bucket) = iter.next() {
                 let entry = new_bucket.as_mut();
 
-                entry.older = if entry.older == L::LinkType::MAX {
-                    L::LinkType::MAX
-                } else {
-                    index_map[entry.older.into_usize()].assume_init()
-                };
+                if entry.older != L::LinkType::MAX {
+                    entry.older = index_map[entry.older.into_usize()].assume_init();
+                }
 
-                entry.newer = if entry.newer == L::LinkType::MAX {
-                    L::LinkType::MAX
-                } else {
-                    index_map[entry.newer.into_usize()].assume_init()
-                };
+                if entry.newer != L::LinkType::MAX {
+                    entry.newer = index_map[entry.newer.into_usize()].assume_init()
+                }
             }
 
-            self.oldest = if old_oldest == L::LinkType::MAX {
-                L::LinkType::MAX
-            } else {
-                index_map[old_oldest.into_usize()].assume_init()
-            };
+            debug_assert_ne!(old_oldest, L::LinkType::MAX);
+            debug_assert_ne!(old_newest, L::LinkType::MAX);
 
-            self.newest = if old_newest == L::LinkType::MAX {
-                L::LinkType::MAX
-            } else {
-                index_map[old_newest.into_usize()].assume_init()
-            };
+            self.oldest = index_map[old_oldest.into_usize()].assume_init();
+            self.newest = index_map[old_newest.into_usize()].assume_init();
         }
 
         true
