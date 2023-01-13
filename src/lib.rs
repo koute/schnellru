@@ -59,6 +59,17 @@ const fn buckets_for_capacity(capacity: usize, max: usize) -> Option<usize> {
     }
 }
 
+/// Returns the full capacity of the map for a given number of `buckets`.
+const fn full_capacity_for_buckets(buckets: usize) -> usize {
+    if buckets == 0 {
+        0
+    } else if buckets <= 8 {
+        buckets - 1
+    } else {
+        buckets / 8 * 7
+    }
+}
+
 mod private {
     /// This trait's used as the type of the links between the nodes in the LRU map.
     ///
@@ -1061,6 +1072,27 @@ where
                     newer: L::LinkType::MAX,
                 };
 
+                let full_capacity = full_capacity_for_buckets(self.map.buckets());
+                if self.len() < full_capacity / 2 {
+                    // We're at a threshold when it's worth it to just rehash the map.
+                    if !self.rehash_in_place() {
+                        // This can only fail if we failed to allocate memory.
+                        //
+                        // We're screwed; just give up.
+                        return false;
+                    }
+
+                    assert!(self.map.capacity() > self.map.len());
+
+                    // SAFETY: We've just checked that there is still free capacity.
+                    unsafe {
+                        let bucket = self.map.insert_no_grow(hash, entry);
+                        self.finish_inserting_bucket(bucket);
+                    }
+
+                    return true;
+                }
+
                 match self.map.try_insert_no_grow(hash, entry) {
                     Ok(bucket) => {
                         // SAFETY: We've just inserted this bucket, so it's safe to call this.
@@ -1081,17 +1113,184 @@ where
         }
     }
 
+    /// Rehashes the map in place.
+    ///
+    /// Mostly used to free up any excess capacity that's being hogged by deleted entries.
+    #[inline(never)]
+    #[cold]
+    fn rehash_in_place(&mut self) -> bool {
+        if self.is_empty() {
+            // The map's empty so we don't have to update any links.
+            // Just trigger a rehash if necessary.
+            self.map.reserve(1, |_| unreachable!());
+            return true;
+        }
+
+        let bucket_count = self.map.buckets();
+        let mut buffer = alloc::vec::Vec::<core::mem::MaybeUninit<L::LinkType>>::new();
+        if buffer.try_reserve_exact(bucket_count * 2).is_err() {
+            return false;
+        }
+
+        // SAFETY: The inner type is `MaybeUninit`, so this is safe.
+        unsafe {
+            buffer.set_len(bucket_count * 2);
+        }
+
+        let (older_to_old_index_map, index_map) = buffer.split_at_mut(bucket_count);
+
+        let old_oldest = core::mem::replace(&mut self.oldest, L::LinkType::MAX);
+        let old_newest = core::mem::replace(&mut self.newest, L::LinkType::MAX);
+
+        // SAFETY: We drop the iterator before the lifetime of the map ends,
+        //         and we only fetch values it returns.
+        unsafe {
+            let mut iter = self.map.iter();
+            while let Some(old_bucket) = iter.next() {
+                let old_index = self.map.bucket_index(&old_bucket);
+                let entry = old_bucket.as_ref();
+                if entry.older != L::LinkType::MAX {
+                    // Since the index of each entry is stored implicitly by hashbrown
+                    // as an offset from the start of the table we won't have access to
+                    // it after the map is rehashed, so save those indexes now.
+                    //
+                    // We use the link to the older entry as a key here since it's going
+                    // to be unique anyway.
+                    older_to_old_index_map[entry.older.into_usize()] =
+                        core::mem::MaybeUninit::new(L::LinkType::from_usize(old_index));
+                }
+            }
+        }
+
+        // Trigger a rehash.
+        {
+            // Protect against a panic in the hash function.
+            struct Guard<'a, K, V, L>
+            where
+                L: Limiter<K, V>,
+            {
+                map: &'a mut RawTable<Entry<K, V, L::LinkType>>,
+                limiter: &'a mut L,
+            }
+
+            impl<'a, K, V, L> Drop for Guard<'a, K, V, L>
+            where
+                L: Limiter<K, V>,
+            {
+                fn drop(&mut self) {
+                    // Clear the whole map if this is suddenly dropped.
+                    //
+                    // If we panic during a rehash some of the elements might have been dropped.
+                    // This will mess up our links, so just clear the whole map to make sure
+                    // that we can't trigger any unsoundness.
+                    self.map.clear();
+                    self.limiter.on_cleared();
+                }
+            }
+
+            let guard = Guard {
+                map: &mut self.map,
+                limiter: &mut self.limiter,
+            };
+
+            // Unfortunately hashbrown doesn't expose the ability to directly trigger a rehash,
+            // but we can force it to do it through 'reserve'. It's a hack, but it works.
+            let extra_capacity = full_capacity_for_buckets(bucket_count) / 2 - guard.map.len();
+            let hasher = &self.hasher;
+            guard.map.reserve(extra_capacity, |entry| {
+                let mut hasher = hasher.build_hasher();
+                entry.key.hash(&mut hasher);
+                hasher.finish()
+            });
+
+            core::mem::forget(guard);
+        }
+
+        debug_assert_eq!(self.map.buckets(), bucket_count); // Make sure it was actually a rehash.
+
+        // SAFETY: We drop the iterator before the lifetime of the map ends,
+        //         we only fetch values it returns, and we only access elements
+        //         in the `older_to_old_index_map` which were initialized in the previous loop.
+        unsafe {
+            // Now go through the rehashed map and build a map of old indexes to new indexes.
+            let mut iter = self.map.iter();
+            while let Some(new_bucket) = iter.next() {
+                let new_index = self.map.bucket_index(&new_bucket);
+                let entry = new_bucket.as_ref();
+                let old_index = if entry.older == L::LinkType::MAX {
+                    old_oldest
+                } else {
+                    older_to_old_index_map[entry.older.into_usize()].assume_init()
+                }
+                .into_usize();
+
+                index_map[old_index] = core::mem::MaybeUninit::new(L::LinkType::from_usize(new_index));
+            }
+        }
+
+        // SAFETY: We drop the iterator before the lifetime of the map ends,
+        //         we only fetch values it returns, and we only access elements
+        //         in the `index_map` which were initialized in the previous loop.
+        unsafe {
+            // Adjust all of the links in the new map.
+            let mut iter = self.map.iter();
+            while let Some(new_bucket) = iter.next() {
+                let entry = new_bucket.as_mut();
+
+                if entry.older != L::LinkType::MAX {
+                    entry.older = index_map[entry.older.into_usize()].assume_init();
+                }
+
+                if entry.newer != L::LinkType::MAX {
+                    entry.newer = index_map[entry.newer.into_usize()].assume_init()
+                }
+            }
+
+            debug_assert_ne!(old_oldest, L::LinkType::MAX);
+            debug_assert_ne!(old_newest, L::LinkType::MAX);
+
+            self.oldest = index_map[old_oldest.into_usize()].assume_init();
+            self.newest = index_map[old_newest.into_usize()].assume_init();
+        }
+
+        true
+    }
+
     /// Tries to grow the map in size.
     ///
     /// This rehashes and reindexes the map, updating all of the links between nodes.
-    fn try_grow(&mut self, new_capacity: usize) -> bool {
-        let new_bucket_count = match Self::buckets_for_capacity(new_capacity) {
+    fn try_grow(&mut self, mut required_length: usize) -> bool {
+        let mut new_bucket_count = match Self::buckets_for_capacity(required_length) {
             Some(new_bucket_count) => new_bucket_count,
             None => {
                 // The capacity's too big; bail.
                 return false;
             }
         };
+
+        let old_bucket_count = self.map.buckets();
+        debug_assert!(old_bucket_count < L::LinkType::MAX.into_usize());
+
+        if new_bucket_count <= old_bucket_count {
+            // The bucket count's less or unchanged.
+            let full_capacity = full_capacity_for_buckets(old_bucket_count);
+            if required_length <= full_capacity / 2 {
+                // Still plenty of space; it's just taken by all of the deleted entries.
+                return self.rehash_in_place();
+            }
+
+            // Force the map to grow.
+            required_length = full_capacity_for_buckets(old_bucket_count * 2);
+            new_bucket_count = match Self::buckets_for_capacity(required_length) {
+                Some(new_bucket_count) => new_bucket_count,
+                None => {
+                    // The capacity's too big; bail.
+                    return false;
+                }
+            };
+        }
+
+        debug_assert!(new_bucket_count > old_bucket_count);
 
         let new_memory_usage = match Self::memory_usage_for_buckets(new_bucket_count) {
             Some(new_memory_usage) => new_memory_usage,
@@ -1106,10 +1305,7 @@ where
             return false;
         }
 
-        let old_bucket_count = self.map.buckets();
-        debug_assert!(old_bucket_count < L::LinkType::MAX.into_usize());
-
-        let new_map = match RawTable::try_with_capacity(new_capacity) {
+        let new_map = match RawTable::try_with_capacity(required_length) {
             Ok(new_map) => new_map,
             Err(_) => return false,
         };
@@ -2173,5 +2369,40 @@ mod tests {
         lru.limiter_mut().overflow = true;
         assert!(!lru.insert(3, 30));
         assert!(lru.is_empty());
+    }
+
+    #[test]
+    fn insert_and_remove_a_lot_of_elements() {
+        let mut lru = LruMap::with_seed(UnlimitedCompact, [12, 34, 56, 78]);
+        for n in 0..1024 {
+            lru.insert(n % 256, 255);
+            lru.insert(65535, 255);
+            lru.remove(&65535);
+
+            if n % 1024 == 0 {
+                lru.assert_check_internal_state();
+            }
+        }
+    }
+
+    #[test]
+    fn randomly_insert_and_remove_elements_in_a_memory_bound_map() {
+        let limiter = ByMemoryUsage::new(512);
+        let mut lru = LruMap::with_seed(limiter, [12, 34, 56, 78]);
+
+        let count = if cfg!(miri) { 1024 * 4 } else { 1024 * 64 };
+
+        let mut rng = oorandom::Rand32::new(1234);
+        for n in 0..count {
+            let key = rng.rand_range(0..255) as u16;
+            lru.insert(key, n as u8);
+
+            let key = rng.rand_range(0..255) as u16;
+            lru.remove(&key);
+
+            if n % 1024 == 0 {
+                lru.assert_check_internal_state();
+            }
+        }
     }
 }
