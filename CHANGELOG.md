@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.2.0 - 2023-01-13
+
 ### Changed
 
 - `hashbrown` was updated to 0.13.2
