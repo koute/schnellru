@@ -556,6 +556,17 @@ where
         self.map.allocation_info().1.size()
     }
 
+    /// Returns a pointer to the underlying memory allocation.
+    #[doc(hidden)]
+    pub fn allocation_pointer(&self) -> *const u8 {
+        let (ptr, layout) = self.map.allocation_info();
+        if layout.size() == 0 {
+            core::ptr::null()
+        } else {
+            ptr.as_ptr() as *const u8
+        }
+    }
+
     /// Returns the number of elements in the map.
     pub fn len(&self) -> usize {
         self.map.len()
