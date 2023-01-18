@@ -673,6 +673,13 @@ where
         self.peek_by_hash(hash, |existing_key, _| *key == *existing_key)
     }
 
+    /// Returns a mutable reference to the value for a given key. Does not change the order of the elements.
+    #[inline]
+    pub fn peek_mut<'a>(&'a mut self, key: &(impl Hash + PartialEq<K> + ?Sized)) -> Option<&'a mut V> {
+        let hash = self.hash_key(&key);
+        self.peek_by_hash_mut(hash, |existing_key, _| *key == *existing_key)
+    }
+
     /// Returns a reference to the value for a given `hash` and for which `is_eq` returns `true`.
     /// Does not change the order of the elements.
     #[inline]
@@ -682,6 +689,17 @@ where
         // SAFETY: Bucket always exists.
         let entry = unsafe { bucket.as_ref() };
         Some(&entry.value)
+    }
+
+    /// Returns a mutable reference to the value for a given `hash` and for which `is_eq` returns `true`.
+    /// Does not change the order of the elements.
+    #[inline]
+    pub fn peek_by_hash_mut(&mut self, hash: u64, mut is_eq: impl FnMut(&K, &V) -> bool) -> Option<&mut V> {
+        let bucket = self.map.find(hash, |entry| is_eq(&entry.key, &entry.value))?;
+
+        // SAFETY: Bucket always exists.
+        let entry = unsafe { bucket.as_mut() };
+        Some(&mut entry.value)
     }
 
     /// Removes an element from the map.
@@ -2483,5 +2501,25 @@ mod tests {
                 lru.assert_check_internal_state();
             }
         }
+    }
+
+    #[test]
+    fn peek_works() {
+        let mut lru = LruMap::new(UnlimitedCompact);
+        lru.insert(1, 10);
+        lru.insert(2, 20);
+        lru.insert(3, 30);
+
+        assert_eq!(to_vec(&lru), vec![(3, 30), (2, 20), (1, 10)]);
+        assert_eq!(*lru.peek(&2).unwrap(), 20);
+        // Order's not changed.
+        assert_eq!(to_vec(&lru), vec![(3, 30), (2, 20), (1, 10)]);
+
+        assert_eq!(*lru.peek_mut(&2).unwrap(), 20);
+        // Order's not changed.
+        assert_eq!(to_vec(&lru), vec![(3, 30), (2, 20), (1, 10)]);
+
+        *lru.peek_mut(&2).unwrap() = 200;
+        assert_eq!(to_vec(&lru), vec![(3, 30), (2, 200), (1, 10)]);
     }
 }
