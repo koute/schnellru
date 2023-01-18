@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.2.1 - 2023-01-18
+
+### Changed
+
+- `peek` has now an explicit lifetime annotation
+
+### Added
+
+- Added `peek_mut` and `peek_by_hash_mut`
+
 ## 0.2.0 - 2023-01-13
 
 ### Changed
