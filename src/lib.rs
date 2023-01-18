@@ -668,7 +668,7 @@ where
 
     /// Returns a reference to the value for a given key. Does not change the order of the elements.
     #[inline]
-    pub fn peek(&self, key: &(impl Hash + PartialEq<K> + ?Sized)) -> Option<&V> {
+    pub fn peek<'a>(&'a self, key: &(impl Hash + PartialEq<K> + ?Sized)) -> Option<&'a V> {
         let hash = self.hash_key(&key);
         self.peek_by_hash(hash, |existing_key, _| *key == *existing_key)
     }
