@@ -193,8 +193,6 @@ pub trait Limiter<K, V> {
 
     /// Called *before* a node is replaced inside of the map.
     ///
-    /// Changing the old key here in a way that hashes or compares differently is a logic error.
-    ///
     /// Should return `false` if it would be impossible to insert a given element into an empty map.
     /// Otherwise should always return `true` and, if applicable, update its internal cost estimate.
     ///
