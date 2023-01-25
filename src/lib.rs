@@ -645,6 +645,7 @@ where
     where
         L::KeyToInsert<'a>: Hash + PartialEq<K>,
     {
+        #[allow(clippy::needless_lifetimes)]
         #[inline(always)]
         unsafe fn cast_lifetime<'a, 'b, T>(x: &'a mut T) -> &'b mut T {
             core::mem::transmute(x)
