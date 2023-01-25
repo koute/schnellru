@@ -191,16 +191,22 @@ pub trait Limiter<K, V> {
     /// The `key` and `value` is the key and value of the element we're about to insert.
     fn on_insert(&mut self, length: usize, key: Self::KeyToInsert<'_>, value: V) -> Option<(K, V)>;
 
-    /// Called *before* a node is replaced inside of the map.
+    /// Called *before* a value is replaced inside of the map.
     ///
     /// Should return `false` if it would be impossible to insert a given element into an empty map.
     /// Otherwise should always return `true` and, if applicable, update its internal cost estimate.
     ///
-    /// Changing the key here in a way that hashes or compares differently is a logic error.
+    /// Returning `false` will remove the element from the map.
     ///
     /// The `length` specifies how many elements are currently in the map.
     /// The `old_key` and `old_value` is the key and value that are already inside of the map.
     /// The `new_key` and `new_value` is the key and value of the element we're about to insert.
+    ///
+    /// Changing the `old_key` here in a way that hashes or compares differently is a logic error.
+    ///
+    /// This is only called when the keys are equal! The `old_key` will be kept in the map while
+    /// the `new_key` is moved into this callback, so you're free to do with it as you see fit.
+    // TODO: Rename to `on_replace_value`.
     fn on_replace(
         &mut self,
         length: usize,
