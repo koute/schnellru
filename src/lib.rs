@@ -4,8 +4,10 @@
 #![deny(unused_must_use)]
 #![allow(clippy::while_let_on_iterator)]
 
+use core::fmt::{Debug, Formatter};
 use core::hash::{BuildHasher, Hash, Hasher};
 use hashbrown::raw::{Bucket, RawTable};
+use core::any::type_name;
 
 extern crate alloc;
 
@@ -317,6 +319,16 @@ where
     newest: <L as Limiter<K, V>>::LinkType,
     oldest: <L as Limiter<K, V>>::LinkType,
     limiter: L,
+}
+
+impl<K, V, L: Limiter<K, V>, S> Debug for LruMap<K, V, L, S> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LruMap")
+            .field("len", &self.map.len())
+            .field("key_type", &type_name::<K>())
+            .field("value_type", &type_name::<V>())
+            .finish()
+    }
 }
 
 impl<K, V, L, S> Default for LruMap<K, V, L, S>
