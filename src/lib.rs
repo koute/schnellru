@@ -327,7 +327,7 @@ impl<K, V, L: Limiter<K, V>, S> Debug for LruMap<K, V, L, S> {
             .field("len", &self.map.len())
             .field("key_type", &type_name::<K>())
             .field("value_type", &type_name::<V>())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
