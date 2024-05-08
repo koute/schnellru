@@ -11,8 +11,8 @@ cargo clippy -- -D warnings
 cargo check --no-default-features
 
 cargo test
-RUSTFLAGS="-Z randomize-layout" cargo test
-cargo miri test
+RUSTFLAGS="-Z randomize-layout" rustup run nightly-2024-05-08 cargo test
+rustup run nightly-2024-05-08 cargo miri test
 
 export HFUZZ_RUN_ARGS="--timeout 5 --verbose --iterations 10000000 --exit_upon_crash"
 
