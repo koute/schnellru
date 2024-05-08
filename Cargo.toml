@@ -8,6 +8,7 @@ license = "MIT/Apache-2.0"
 readme = "README.md"
 description = "A fast and flexible LRU map"
 edition = "2021"
+rust-version = "1.71.1"
 
 [features]
 default = ["runtime-rng"]
