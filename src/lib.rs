@@ -1582,7 +1582,6 @@ where
 
 impl<'a, K, V, L> ExactSizeIterator for IterMut<'a, K, V, L> where L: Limiter<K, V> {}
 
-
 /// A drain iterator for the LRU map.
 pub struct Drain<'a, K, V, L, S>
 where
@@ -2629,7 +2628,7 @@ mod tests {
         lru.insert(2, 3);
         assert!(!lru.is_empty());
         assert_eq!(lru.len(), 3);
-        for (key, value) in lru.iter_mut() { 
+        for (key, value) in lru.iter_mut() {
             if key % 2 == 0 {
                 *value *= 2;
             }
@@ -2637,7 +2636,7 @@ mod tests {
         // only key which is even has new value which is double of the old value
         // so for key 2, the value 3 is doubled to 6
         assert_eq!(lru.get(&2), Some(&mut 6));
-        
+
         // After using key 2, the iterator should get [2, 1, 0]
         let keys: Vec<_> = lru.iter_mut().map(|(key, _value)| key.clone()).collect();
         assert_eq!(keys, vec![2, 1, 0]);
