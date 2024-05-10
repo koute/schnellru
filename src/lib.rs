@@ -1434,11 +1434,13 @@ where
     /// A mutable iterator over all of the elements in the most recently used order.
     pub fn iter_mut(&mut self) -> IterMut<K, V, L> {
         let newest = self.newest;
-        let len = self.len();
+        let oldest = self.oldest;
+        let remaining = self.len();
         IterMut {
             map: &mut self.map,
             newest,
-            remaining: len,
+            oldest,
+            remaining,
         }
     }
 
@@ -1525,8 +1527,9 @@ pub struct IterMut<'a, K, V, L>
 where
     L: Limiter<K, V>,
 {
-    map: &'a RawTable<Entry<K, V, L::LinkType>>,
+    map: &'a mut RawTable<Entry<K, V, L::LinkType>>,
     newest: L::LinkType,
+    oldest: L::LinkType,
     remaining: usize,
 }
 
@@ -1555,6 +1558,29 @@ where
         (self.remaining, Some(self.remaining))
     }
 }
+
+impl<'a, K, V, L> DoubleEndedIterator for IterMut<'a, K, V, L>
+where
+    L: Limiter<K, V>,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+
+        self.remaining -= 1;
+
+        unsafe {
+            let bucket = self.map.bucket(self.oldest.into_usize());
+            let entry = bucket.as_mut();
+            self.oldest = entry.newer;
+
+            Some((&entry.key, &mut entry.value))
+        }
+    }
+}
+
+impl<'a, K, V, L> ExactSizeIterator for IterMut<'a, K, V, L> where L: Limiter<K, V> {}
 
 
 /// A drain iterator for the LRU map.
@@ -1619,7 +1645,6 @@ mod tests {
     pub use super::*;
 
     extern crate std;
-    use core::usize;
     use std::string::String;
     use std::{vec, vec::Vec};
 
@@ -2599,31 +2624,36 @@ mod tests {
         assert_eq!(lru.len(), 0);
         assert_eq!(lru.iter_mut().collect::<Vec<_>>(), vec![]);
 
-        let vec = vec!["D", "C", "B", "A"];
-        let vec2 = vec.clone();
-        lru.insert(0, vec);
-        lru.insert(1, vec2);
+        lru.insert(0, 1);
+        lru.insert(1, 2);
+        lru.insert(2, 3);
         assert!(!lru.is_empty());
-        assert_eq!(lru.len(), 2);
+        assert_eq!(lru.len(), 3);
         for (key, value) in lru.iter_mut() { 
-            if key == &0 {
-                assert_eq!(value, &mut vec!["D", "C", "B", "A"]);
-                value.retain(|&x| x != "A");
-                // Removing only A will not impact other elements
-                assert_eq!(value, &mut vec!["D", "C", "B"]);
+            if key % 2 == 0 {
+                *value *= 2;
             }
         }
-        assert_eq!(lru.get(&0).unwrap(), &mut vec!["D", "C", "B"]);
-
-        // Removing only elements in 1 key value should not impact other key value
-        assert_eq!(lru.get(&1).unwrap(), &mut vec!["D", "C", "B", "A"]);
+        // only key which is even has new value which is double of the old value
+        // so for key 2, the value 3 is doubled to 6
+        assert_eq!(lru.get(&2), Some(&mut 6));
         
+        // After using key 2, the iterator should get [2, 1, 0]
         let keys: Vec<_> = lru.iter_mut().map(|(key, _value)| key.clone()).collect();
-        assert_eq!(keys, vec![1, 0]);
-        // After using key 0, the iterator should get 0 first and then 1
+        assert_eq!(keys, vec![2, 1, 0]);
+
+        // next_back should return the last key which is 0
+        let last_key = lru.iter_mut().next_back().unwrap().0;
+        assert_eq!(last_key, &0);
+
+        // After using key 0, the iterator should get [0, 2, 1]
         lru.get(&0);
         let keys: Vec<_> = lru.iter_mut().map(|(key, _value)| key.clone()).collect();
+        assert_eq!(keys, vec![0, 2, 1]);
+
+        // next_back should return the last key which is 1
+        let last_key = lru.iter_mut().next_back().unwrap().0;
+        assert_eq!(last_key, &1);
         lru.assert_check_internal_state();
-        assert_eq!(keys, vec![0, 1]);
     }
 }
