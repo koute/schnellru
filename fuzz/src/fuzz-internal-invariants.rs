@@ -50,7 +50,7 @@ impl<K, V> schnellru::Limiter<K, V> for LimitedLength {
     }
 
     #[inline]
-    fn on_insert<'a>(&mut self, current_length: usize, key: Self::KeyToInsert<'a>, value: V) -> Option<(K, V)> {
+    fn on_insert(&mut self, current_length: usize, key: Self::KeyToInsert<'_>, value: V) -> Option<(K, V)> {
         assert_eq!(self.cost, current_length);
         if self.limit > 0 {
             self.cost += 1;
