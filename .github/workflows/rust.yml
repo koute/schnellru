@@ -1,0 +1,48 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install nightly toolchain
+      run: rustup toolchain install nightly-2024-05-08
+    - name: Install miri
+      run: rustup run nightly-2024-05-08 rustup component add miri
+    - name: Build and test
+      run: ./ci/jobs/build-and-test.sh
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install system dependencies
+      run: sudo apt-get install -y binutils-dev libunwind-dev
+    - name: Install honggfuzz
+      run: cargo install honggfuzz
+    - name: Fuzz
+      run: ./ci/jobs/fuzz.sh
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install clippy (base toolchain)
+      run: rustup component add clippy
+    - name: Run clippy
+      run: ./ci/jobs/clippy.sh
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install rustfmt (base toolchain)
+      run: rustup component add rustfmt
+    - name: Run rustfmt
+      run: ./ci/jobs/rustfmt.sh
