@@ -1431,6 +1431,19 @@ where
         }
     }
 
+    /// A mutable iterator over all of the elements in the most recently used order.
+    pub fn iter_mut(&mut self) -> IterMut<K, V, L> {
+        let newest = self.newest;
+        let oldest = self.oldest;
+        let remaining = self.len();
+        IterMut {
+            map: &mut self.map,
+            newest,
+            oldest,
+            remaining,
+        }
+    }
+
     /// Drains the map of all of its elements in the most recently used order.
     ///
     /// When the iterator is dropped the map will be automatically cleared.
@@ -1508,6 +1521,66 @@ where
 }
 
 impl<'a, K, V, L> ExactSizeIterator for Iter<'a, K, V, L> where L: Limiter<K, V> {}
+
+/// An mutable iterator for the LRU map, values are mutable.
+pub struct IterMut<'a, K, V, L>
+where
+    L: Limiter<K, V>,
+{
+    map: &'a mut RawTable<Entry<K, V, L::LinkType>>,
+    newest: L::LinkType,
+    oldest: L::LinkType,
+    remaining: usize,
+}
+
+impl<'a, K, V, L> Iterator for IterMut<'a, K, V, L>
+where
+    L: Limiter<K, V>,
+{
+    type Item = (&'a K, &'a mut V);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+
+        self.remaining -= 1;
+
+        unsafe {
+            let bucket = self.map.bucket(self.newest.into_usize());
+            let entry = bucket.as_mut();
+            self.newest = entry.older;
+
+            Some((&entry.key, &mut entry.value))
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining, Some(self.remaining))
+    }
+}
+
+impl<'a, K, V, L> DoubleEndedIterator for IterMut<'a, K, V, L>
+where
+    L: Limiter<K, V>,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+
+        self.remaining -= 1;
+
+        unsafe {
+            let bucket = self.map.bucket(self.oldest.into_usize());
+            let entry = bucket.as_mut();
+            self.oldest = entry.newer;
+
+            Some((&entry.key, &mut entry.value))
+        }
+    }
+}
+
+impl<'a, K, V, L> ExactSizeIterator for IterMut<'a, K, V, L> where L: Limiter<K, V> {}
 
 /// A drain iterator for the LRU map.
 pub struct Drain<'a, K, V, L, S>
@@ -2541,5 +2614,45 @@ mod tests {
 
         *lru.peek_mut(&2).unwrap() = 200;
         assert_eq!(to_vec(&lru), vec![(3, 30), (2, 200), (1, 10)]);
+    }
+
+    #[test]
+    fn iter_mut_works() {
+        let mut lru = LruMap::new(UnlimitedCompact);
+        assert!(lru.is_empty());
+        assert_eq!(lru.len(), 0);
+        assert_eq!(lru.iter_mut().collect::<Vec<_>>(), vec![]);
+
+        lru.insert(0, 1);
+        lru.insert(1, 2);
+        lru.insert(2, 3);
+        assert!(!lru.is_empty());
+        assert_eq!(lru.len(), 3);
+        for (key, value) in lru.iter_mut() {
+            if key % 2 == 0 {
+                *value *= 2;
+            }
+        }
+        // only key which is even has new value which is double of the old value
+        // so for key 2, the value 3 is doubled to 6
+        assert_eq!(lru.get(&2), Some(&mut 6));
+
+        // After using key 2, the iterator should get [2, 1, 0]
+        let keys: Vec<_> = lru.iter_mut().map(|(key, _value)| key.clone()).collect();
+        assert_eq!(keys, vec![2, 1, 0]);
+
+        // next_back should return the last key which is 0
+        let last_key = lru.iter_mut().next_back().unwrap().0;
+        assert_eq!(last_key, &0);
+
+        // After using key 0, the iterator should get [0, 2, 1]
+        lru.get(&0);
+        let keys: Vec<_> = lru.iter_mut().map(|(key, _value)| key.clone()).collect();
+        assert_eq!(keys, vec![0, 2, 1]);
+
+        // next_back should return the last key which is 1
+        let last_key = lru.iter_mut().next_back().unwrap().0;
+        assert_eq!(last_key, &1);
+        lru.assert_check_internal_state();
     }
 }
