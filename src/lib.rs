@@ -733,13 +733,7 @@ where
         Some(entry.value)
     }
 
-    /// Inserts a new element into the map.
-    ///
-    /// Can fail if the element is rejected by the limiter or if we fail to grow an empty map.
-    ///
-    /// Returns `true` if the element was inserted; `false` otherwise.
-    #[inline]
-    pub fn insert<'a>(&mut self, key: L::KeyToInsert<'a>, mut value: V) -> bool
+    fn try_insert_internal<'a>(&mut self, key: L::KeyToInsert<'a>, mut value: V, make_room: bool) -> bool
     where
         L::KeyToInsert<'a>: Hash + PartialEq<K>,
     {
@@ -778,10 +772,14 @@ where
             };
 
             if !self.map.is_empty() && self.limiter.is_over_the_limit(self.map.len() + 1) {
-                // We'll be over the limit after inserting this new element,
-                // so we know we will have to pop at least one old element.
+                if make_room {
+                    // We'll be over the limit after inserting this new element,
+                    // so we know we will have to pop at least one old element.
 
-                self.pop_oldest();
+                    self.pop_oldest();
+                } else {
+                    return false;
+                }
             }
 
             let was_inserted = if self.map.is_empty() {
@@ -797,9 +795,43 @@ where
             }
         }
 
-        if self.limiter.is_over_the_limit(self.map.len()) {
+        if make_room && self.limiter.is_over_the_limit(self.map.len()) {
             // If the map's limited not by the raw length then we can end up here.
             self.pop_until_under_the_limit();
+        }
+
+        true
+    }
+
+    /// Tries inserting a new element into the map
+    ///
+    /// Differs from `insert` in the fact that it will not try removing elements to insert this one.
+    ///
+    /// Returns `true` if the element was inserted; `false` otherwise.
+    #[inline]
+    pub fn try_insert<'a>(&mut self, key: L::KeyToInsert<'a>, value: V) -> bool
+    where
+        L::KeyToInsert<'a>: Hash + PartialEq<K>,
+    {
+        if !self.try_insert_internal(key, value, false) {
+            return false;
+        }
+
+        true
+    }
+
+    /// Inserts a new element into the map.
+    ///
+    /// Can fail if the element is rejected by the limiter or if we fail to grow an empty map.
+    ///
+    /// Returns `true` if the element was inserted; `false` otherwise.
+    #[inline]
+    pub fn insert<'a>(&mut self, key: L::KeyToInsert<'a>, value: V) -> bool
+    where
+        L::KeyToInsert<'a>: Hash + PartialEq<K>,
+    {
+        if !self.try_insert_internal(key, value, true) {
+            return false;
         }
 
         !self.is_empty()
@@ -1957,6 +1989,32 @@ mod tests {
         }
         assert_eq!(lru.len(), 8);
         assert_eq!(lru.guaranteed_capacity(), 14);
+        lru.assert_check_internal_state();
+    }
+
+    #[test]
+    fn try_insert_works() {
+        let mut lru = LruMap::with_seed(ByLength::new(3), [12, 34, 56, 78]);
+        assert_eq!(lru.len(), 0);
+        assert_eq!(lru.guaranteed_capacity(), 0);
+
+        assert!(lru.try_insert(1, 10));
+        assert!(lru.try_insert(2, 20));
+        assert!(lru.try_insert(3, 30));
+        assert_eq!(lru.len(), 3);
+        assert_eq!(lru.guaranteed_capacity(), 3);
+        assert!(!lru.try_insert(4, 40));
+        assert!(!lru.try_insert(5, 50));
+
+        // Now check if our old items haven't been affected
+        assert!(lru.get(&1).is_some());
+        assert!(lru.get(&2).is_some());
+        assert!(lru.get(&3).is_some());
+        assert!(lru.get(&4).is_none());
+        assert!(lru.get(&5).is_none());
+
+        assert_eq!(lru.len(), 3);
+        assert_eq!(lru.guaranteed_capacity(), 3);
         lru.assert_check_internal_state();
     }
 
