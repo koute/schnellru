@@ -1,7 +1,7 @@
 use crate::Limiter;
 
 /// A limiter for a map which is limited by the number of elements.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 #[repr(transparent)]
 pub struct ByLength {
     max_length: u32,
@@ -13,7 +13,7 @@ impl ByLength {
     /// If you don't need to strictly cap the number of elements and just want to limit
     /// the memory usage then prefer using [`ByMemoryUsage`].
     pub const fn new(max_length: u32) -> Self {
-        ByLength { max_length }
+        Self { max_length }
     }
 
     /// Returns the max length.
