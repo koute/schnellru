@@ -64,6 +64,12 @@ impl<K, V> Limiter<K, V> for ByLength {
     }
 }
 
+impl From<u32> for ByLength {
+    fn from(max_length: u32) -> Self {
+        Self::new(max_length)
+    }
+}
+
 /// A limiter for a map which is limited by memory usage.
 #[derive(Copy, Clone, Debug)]
 #[repr(transparent)]
@@ -118,6 +124,12 @@ impl<K, V> Limiter<K, V> for ByMemoryUsage {
     #[inline]
     fn on_grow(&mut self, new_memory_usage: usize) -> bool {
         new_memory_usage <= self.max_bytes
+    }
+}
+
+impl From<usize> for ByMemoryUsage {
+    fn from(max_bytes: usize) -> Self {
+        Self::new(max_bytes)
     }
 }
 
