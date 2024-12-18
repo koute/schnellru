@@ -1915,7 +1915,7 @@ mod tests {
 
     #[test]
     fn insert_with_limiter_works() {
-        let mut lru = LruMap::new(ByLength::new(3));
+        let mut lru: LruMap<u32, u32> = LruMap::new(3u32.into());
         lru.insert(1, 10);
         lru.insert(2, 20);
         lru.insert(3, 30);
