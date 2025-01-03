@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "schnellru"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "ahash 0.8.11",
  "cfg-if",
