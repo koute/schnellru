@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.2.4 - 2025-01-03
+
+- Implement `From` for `ByLength` and `ByMemoryUsage` (#9)
+
+## 0.2.3 - 2024-05-14
+
+### Added
+
+- Implement `iter_mut` for `LruMap` (#5)
+
+## 0.2.2 - 2024-05-08
+
+### Added
+
+- Implement `Debug` for `LruMap` (#4)
+- Set MSRV to 1.71.1
+
 ## 0.2.1 - 2023-01-18
 
 ### Changed
