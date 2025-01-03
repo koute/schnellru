@@ -27,7 +27,7 @@ jobs:
     - name: Install system dependencies
       run: sudo apt-get install -y binutils-dev libunwind-dev
     - name: Install honggfuzz
-      run: cargo install honggfuzz
+      run: cargo install --locked --version 0.5.56 honggfuzz
     - name: Fuzz
       run: ./ci/jobs/fuzz.sh
   clippy:

@@ -20,7 +20,7 @@ path = "src/fuzz-by-memory-usage-works.rs"
 
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }
-honggfuzz = "0.5"
+honggfuzz = "0.5.56"
 lru = "0.8.1"
 
 schnellru = { path = ".." }
